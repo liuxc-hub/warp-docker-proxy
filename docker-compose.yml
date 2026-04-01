@@ -23,6 +23,7 @@ services:
       - WARP_LICENSE=
     volumes:
       - ./data:/var/lib/cloudflare-warp
+      - ./logs:/logs
     healthcheck:
       test: ["CMD", "warp-cli", "status"]
       interval: 30s

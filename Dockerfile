@@ -44,9 +44,11 @@ exec su -c "$*" warpuser\n\
 
 # Copy configuration files and scripts
 COPY warp-setup.sh /usr/local/bin/warp-setup.sh
-COPY gost_setup.sh /usr/local/bin/gost_setup.sh
+COPY gost-setup.sh /usr/local/bin/gost-setup.sh
+COPY clean-logs.sh /usr/local/bin/clean-logs.sh
 RUN chmod +x /usr/local/bin/warp-setup.sh
-RUN chmod +x /usr/local/bin/gost_setup.sh
+RUN chmod +x /usr/local/bin/gost-setup.sh
+RUN chmod +x /usr/local/bin/clean-logs.sh
 COPY supervisord.conf /etc/supervisord.conf
 
 # Create supervisor log directory
