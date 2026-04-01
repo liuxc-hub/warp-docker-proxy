@@ -1,6 +1,6 @@
 services:
   warp-proxy:
-    image: "867251765/warp-docker-proxy:latest"
+    image: "867251765/warp-docker-proxy:latest-lib"
     container_name: warp-docker-proxy
     hostname: warp-docker-proxy
     ports:
