@@ -45,14 +45,14 @@ exec su -c "$*" warpuser\n\
 # Copy configuration files and scripts
 COPY warp-setup.sh /usr/local/bin/warp-setup.sh
 COPY gost_setup.sh /usr/local/bin/gost_setup.sh
-COPY supervisord.conf /etc/supervisord.conf
 RUN chmod +x /usr/local/bin/warp-setup.sh
 RUN chmod +x /usr/local/bin/gost_setup.sh
+COPY supervisord.conf /etc/supervisord.conf
 
 # Create supervisor log directory
 RUN mkdir -p /var/log/supervisor
 
-# Expose SOCKS5 proxy port
+# Expose SOCKS5/HTTP proxy port
 EXPOSE 1080
 
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]

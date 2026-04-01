@@ -4,7 +4,7 @@ services:
     container_name: warp-docker-proxy
     hostname: warp-docker-proxy
     ports:
-      - "51080:1080"
+      - "41080:1080"
     restart: unless-stopped    
     cap_add:
       - NET_ADMIN
@@ -13,11 +13,14 @@ services:
       - /dev/net/tun:/dev/net/tun      
     environment:
       - DEBIAN_FRONTEND=noninteractive
-      # Set THE WARP_TOKEN if you want to use ZeroTrust 
-      # it must start with "com.cloudflare.warp://"
+      # Set WARP_TOKEN if you want to use ZeroTrust
+      # ep "com.cloudflare.warp://"
       - WARP_TOKEN=
+      # set PROXY_USER and PROXY_PASSWORD if you want auth your proxy
       - PROXY_USER=
       - PROXY_PASSWORD=
+      # set WARP_LICENSE if you have license with free (not ZeroTrust)
+      - WARP_LICENSE=
     volumes:
       - ./data:/var/lib/cloudflare-warp
     healthcheck:

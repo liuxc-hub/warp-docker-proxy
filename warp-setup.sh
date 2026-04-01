@@ -1,84 +1,91 @@
 #!/bin/bash
+set -e
 
-# Wait for warp-svc to be ready
-echo "Waiting for WARP service to be ready..."
+# 等待WARP守护进程启动
+echo "Waiting for WARP service to be ready"
 sleep 5
 
-# Wait for warp-svc to actually be listening
-echo "Checking if warp-svc is responding..."
-# warp config
-WARP_CONFIG="/var/lib/cloudflare-warp/reg.json"
+# 检查配置文件, 判断是否已经注册并启动过了
+echo "Checking if warp-svc is responding"
 
-# Check if the warp config exists
-if [ -s "$WARP_CONFIG" ]; then
+# 检查配置文件是否存在
+if [ -s "/var/lib/cloudflare-warp/reg.json" ]; then
     echo "WARP configuration found. Ready to connect."
     break
 fi
 
-echo "Setting WARP Proxy mode..."
+echo "Setting warp mode"
 sudo -u warpuser warp-cli --accept-tos mode warp
 
-echo "Checking WARP registration status..."
-show=$(sudo -u warpuser warp-cli --accept-tos registration show 2>&1)
-
-# Check if "warp-cli registration new" is in the output
-if [[ $show == *"warp-cli registration new"* ]]; then
-    # Check if WARP_TOKEN is set, if not register as normal user
-    if [ -z "$WARP_TOKEN" ]; then
-        echo "====================================="
-        echo "No WARP_TOKEN found, registering as normal user..."
-        echo "If you want to register with a token, set the WARP_TOKEN environment variable."
-        echo "You can get a token by opening https://TEAM_NAME.cloudflareaccess.com/warp"        
-        echo "====================================="
-        sudo -u warpuser warp-cli --accept-tos registration new
-    else
-        echo "No registration found, initializing registration..."
-        TEAM_NAME=$(echo "$WARP_TOKEN" | grep -oP '(?<=//)[^/]+')
-        TEAM_NAME=${TEAM_NAME%%.*}  # Remove everything after the first dot        
-        echo "====================================="
-        echo "No WARP registration found, registering with team name: $TEAM_NAME"
-        echo "If you want to register without a team, unset the WARP_TOKEN environment variable."
-        echo "====================================="
-        sudo -u warpuser warp-cli --accept-tos registration new "$TEAM_NAME"
-        sudo -u warpuser warp-cli --accept-tos registration initialize-token-callback
-        sudo -u warpuser warp-cli --accept-tos registration token "$WARP_TOKEN"
+# registry warp (free/zero trust)
+if [ -z "$WARP_TOKEN" ]; then
+    # 注册 free 账号
+    sudo -u warpuser warp-cli --accept-tos registration new
+    if [ -n "$WARP_LICENSE" ]; then
+      echo "set WARP License..."
+      sudo -u warpuser warp-cli registration license "$WARP_LICENSE"
     fi
+else
+    # 注册 zero trust 账户
+    TEAM_NAME=$(echo "$WARP_TOKEN" | grep -oP '(?<=//)[^/]+')
+    TEAM_NAME=${TEAM_NAME%%.*}
+    sudo -u warpuser warp-cli --accept-tos registration new "$TEAM_NAME"
+    sudo -u warpuser warp-cli --accept-tos registration initialize-token-callback
+    sudo -u warpuser warp-cli --accept-tos registration token "$WARP_TOKEN"
 fi
 
-# Show the current registration status
-echo "Current registration status:"
-warp-cli --accept-tos registration show
-warp-cli --accept-tos connect
+# 检查注册状态
+echo "registration status"
+sudo -u warpuser warp-cli --accept-tos registration show
+# 连接warp
+echo "connect warp"
+sudo -u warpuser warp-cli --accept-tos connect
 
-# Loop to check if WARP is connected
-failures=0
+# Loop to check if WARP is healthy
+RETRY_COUNT=0
 while true; do
-    status=$(warp-cli --accept-tos status)
-    if [[ $status == *"Connected"* ]]; then
-        echo "WARP is connected."
-        break
-    else
-        echo "WARP is not connected, retrying in 5 seconds..."
-        failures=$((failures + 1))
-        if [ $failures -ge 5 ]; then
-            echo "Failed to connect WARP after 5 attempts. Exiting..."
-            echo "If you are using TEAM make sure that you have enabled PROXY Mode in the WARP Profile Dashboard!"
-            echo "Settings > Warp Client > Profile > Service Mode > Proxy"
-            echo "Suggestion: Create new Profile based on user or os (linux) and enable Proxy Mode."
-            exit 1
-        fi
-        sleep 5
-    fi
+    status=$(sudo -u warpuser warp-cli --accept-tos status)
+    trace=$(curl -s --max-time 10 https://www.cloudflare.com/cdn-cgi/trace | grep warp)
+      if [[ $status == *"healthy"* ]] && [[ -n "$trace" ]] && [[ ! $trace == *"off"* ]]; then
+          echo "WARP is healthy and active (warp=on/plus)."
+          echo "Trace info: $trace"
+          break
+      else
+          echo "Condition not met. Retrying in 5 seconds..."
+          echo "  CLI Status: $status"
+          echo "  Trace Info: $trace"
+          sleep 5
+          ((RETRY_COUNT++))
+          echo "health check $RETRY_COUNT times"
+          if [[ $RETRY_COUNT == 50 ]]; then
+            echo "health check 50 times, error connect..."
+            break
+          fi
+      fi
 done
 
 echo "WARP setup completed successfully. Monitoring connection..."
 
-# Keep the script running to monitor WARP connection
+# 持续监控连接是否成功
+RETRY_COUNT=0
 while true; do
     sleep 30
-    status=$(warp-cli --accept-tos status 2>/dev/null)
+
+    # 捕获状态，即使命令失败也不让脚本退出
+    status=$(sudo -u warpuser warp-cli --accept-tos status 2>/dev/null || echo "disconnected")
+
     if [[ $status != *"Connected"* ]]; then
-        echo "WARP connection lost. Attempting to reconnect..."
-        warp-cli --accept-tos connect
+        echo "WARP connection lost. Attempting to reconnect... (Attempt $((RETRY_COUNT+1)))"
+
+        # 尝试重连，如果重连失败，等待时间逐渐增加 (5s, 10s, 15s...)
+        if ! sudo -u warpuser warp-cli --accept-tos connect; then
+            local backoff_time=$((5 + RETRY_COUNT * 5))
+            backoff_time=$((backoff_time > 30 ? 30 : backoff_time)) # 最大不超过30秒
+            echo "Reconnect failed. Retrying in ${backoff_time}s..."
+            sleep $backoff_time
+            ((RETRY_COUNT++))
+        else
+            RETRY_COUNT=0 # 重连成功，重置计数器
+        fi
     fi
 done
