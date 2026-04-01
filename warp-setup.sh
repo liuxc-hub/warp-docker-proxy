@@ -15,12 +15,8 @@ if [ -s "$WARP_CONFIG" ]; then
     break
 fi
 
-# Configure WARP Proxy
-echo "Configuring WARP Proxy..."
-sudo -u warpuser warp-cli --accept-tos proxy port 40000
 echo "Setting WARP Proxy mode..."
-sudo -u warpuser warp-cli --accept-tos mode proxy
-echo "WARP Proxy configured on port 40000."
+sudo -u warpuser warp-cli --accept-tos mode warp
 
 echo "Checking WARP registration status..."
 show=$(sudo -u warpuser warp-cli --accept-tos registration show 2>&1)
