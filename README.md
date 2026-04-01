@@ -26,7 +26,7 @@ version: '3'
 
 services:
   warp-proxy:
-    image: "867251765/warp-docker-proxy:latest-lib"
+    image: "ghcr.io/867251765/warp-docker-proxy:latest-lib"
     container_name: warp-docker-proxy
     hostname: warp-docker-proxy
     ports:
@@ -175,7 +175,7 @@ services:
 
 #### 镜像更新
 ```bash
-docker pull 867251765/warp-docker-proxy:latest-lib
+docker pull ghcr.io/867251765/warp-docker-proxy:latest-lib
 docker-compose down
 docker-compose up -d
 ```
