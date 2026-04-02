@@ -5,8 +5,6 @@ on:
     branches:
       - master
       - release
-      - release-lib
-      - develop
       - develop-lib
     tags:
       - 'v*'
@@ -40,25 +38,32 @@ jobs:
         run: |
           IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/warp-docker-proxy"
           TAGS=""
+          
+          # 1. 分支逻辑 (所有分支都打上分支名标签)
+          # 这样 release 分支会有 :release 标签，develop-lib 会有 :develop-lib 标签
+          if [[ "${{ github.ref_type }}" == "branch" ]]; then
+            TAGS="${IMAGE_NAME}:${{ github.ref_name }}"
+          fi
 
-          # 基础版本逻辑
+          # 2. release版本逻辑
           if [[ "${{ github.ref_name }}" == "release" ]]; then
-            TAGS="${IMAGE_NAME}:latest"
+            TAGS="${TAGS},${IMAGE_NAME}:latest"
           fi
-          if [[ "${{ github.ref_name }}" == "release-lib" ]]; then
-            TAGS="${IMAGE_NAME}:latest-lib"
-          fi
+
+          # 3. Tag 逻辑 (如果是打 git tag 推送)
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
             TAGS="${IMAGE_NAME}:${{ github.ref_name }}"
           fi
 
-          # 开发版本逻辑
-          if [[ "${{ github.ref_type }}" == "branch" ]]; then
-             TAGS="${TAGS},${IMAGE_NAME}:${{ github.ref_name }}"
-          fi
-
+          # 4. SHA 逻辑 (所有情况都附加 SHA 标签)
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          TAGS="${TAGS},${IMAGE_NAME}:sha-${SHORT_SHA}"
+          
+          # 拼接 SHA 标签
+          if [ -n "$TAGS" ]; then
+            TAGS="${TAGS},${IMAGE_NAME}:sha-${SHORT_SHA}"
+          else
+            TAGS="${IMAGE_NAME}:sha-${SHORT_SHA}"
+          fi
 
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
 
