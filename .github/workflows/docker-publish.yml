@@ -1,0 +1,76 @@
+name: 🐳 Docker Build & Push (GHCR Only)
+
+on:
+  push:
+    branches:
+      - master
+      - release
+      - develop-lib
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+# --- 新增：关键权限配置 ---
+permissions:
+  contents: read
+  packages: write # 允许推送镜像
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🛑 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔐 Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }} # 现在它有写入权了
+
+      - name: 🏷️ Generate Tags
+        id: meta
+        run: |
+          IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/warp-docker-proxy"
+          TAGS=""
+          
+          # 1. 分支逻辑 (所有分支都打上分支名标签)
+          # 这样 release 分支会有 :release 标签，develop-lib 会有 :develop-lib 标签
+          if [[ "${{ github.ref_type }}" == "branch" ]]; then
+            TAGS="${IMAGE_NAME}:${{ github.ref_name }}"
+          fi
+
+          # 2. release版本逻辑
+          if [[ "${{ github.ref_name }}" == "release" ]]; then
+            TAGS="${TAGS},${IMAGE_NAME}:latest"
+          fi
+
+          # 3. Tag 逻辑 (如果是打 git tag 推送)
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAGS="${IMAGE_NAME}:${{ github.ref_name }}"
+          fi
+
+          # 4. SHA 逻辑 (所有情况都附加 SHA 标签)
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          
+          # 拼接 SHA 标签
+          if [ -n "$TAGS" ]; then
+            TAGS="${TAGS},${IMAGE_NAME}:sha-${SHORT_SHA}"
+          else
+            TAGS="${IMAGE_NAME}:sha-${SHORT_SHA}"
+          fi
+
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+
+      - name: 📦 Build and Push
+        if: ${{ steps.meta.outputs.tags != '' }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
