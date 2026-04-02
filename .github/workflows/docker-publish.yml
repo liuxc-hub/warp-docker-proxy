@@ -1,29 +1,20 @@
-name: 🐳 Docker Image CI
+name: 🐳 Docker Build & Push (GHCR Only)
 
 on:
-  # 1. 推送代码到指定分支时触发
   push:
     branches:
       - master
       - release
       - release-lib
-    # 2. 打 Tag 时触发 (用于发布正式版本)
+      - develop
+      - develop-lib
     tags:
-      - 'v*' # 匹配 v1.0, v1.0.0, v1.1.1-beta 等格式
-
-  # 3. 手动触发 (方便调试)
+      - 'v*'
   workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
 
     steps:
       - name: 🛑 Checkout code
@@ -32,51 +23,52 @@ jobs:
       - name: 🐳 Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: 🧩 Login to DockerHub
+      # --- 1. 登录 GitHub Container Registry (GHCR) ---
+      - name: 🔐 Login to GHCR
         uses: docker/login-action@v3
-        # 建议在 Settings -> Secrets -> Actions 中添加 DOCKERHUB_USERNAME 和 DOCKERHUB_TOKEN
-        # 如果是 GitHub Container Registry (ghcr.io)，则不需要此步骤或使用默认 token
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🏷️ Generate Docker Metadata
+      # --- 2. 生成标签 (仅针对 GHCR) ---
+      - name: 🏷️ Generate Tags
         id: meta
-        uses: docker/metadata-action@v5
-        with:
-          # 自定义镜像标签逻辑
-          tags: |
-            # --- 1. 基于分支的标签 (Branch Tags) ---
-            # 如果是 master 分支
-            type=raw,value=master,enable={{isBranch 'master'}}
-            
-            # 如果是 release 分支 -> 打 release 和 latest 标签
-            type=raw,value=release,enable={{isBranch 'release'}}
-            type=raw,value=latest,enable={{isBranch 'release'}}
-            
-            # 如果是 release-lib 分支 -> 打 release-lib 和 latest-lib 标签
-            type=raw,value=release-lib,enable={{isBranch 'release-lib'}}
-            type=raw,value=latest-lib,enable={{isBranch 'release-lib'}}
+        run: |
+          # 定义镜像地址 (注意这里用你的 GitHub 用户名)
+          IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/warp-docker-proxy"
+          
+          TAGS=""
 
-            # --- 2. 基于 Git Tag 的标签 (Release Version) ---
-            # 当打 tag (如 v1.0.0) 时，自动推送到 release 分支流
-            # pattern: {{version}} 会自动去掉 v 前缀
-            type=raw,value={{version}},enable={{isTag}}
-            type=raw,value=latest,enable={{isTag}} # 可选：打 Tag 时也更新 latest
+          # --- 逻辑 A: 基础版本 (latest, latest-lib, v*) ---
+          if [[ "${{ github.ref_name }}" == "release" ]]; then
+            TAGS="${IMAGE_NAME}:latest"
+          fi
+          if [[ "${{ github.ref_name }}" == "release-lib" ]]; then
+            TAGS="${IMAGE_NAME}:latest-lib"
+          fi
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAGS="${IMAGE_NAME}:${{ github.ref_name }}"
+          fi
 
-            # --- 3. 唯一性标签 (Immutable Tags) ---
-            # 始终包含 Commit SHA，用于精确回溯
-            type=raw,value=sha-{{.Sha}}
-          # 仅在 master/release/release-lib 分支或 tag 时运行
-          flavor: latest=false
+          # --- 逻辑 B: 开发版本 (分支名 + SHA) ---
+          # 1. 如果是分支推送，添加分支名标签
+          if [[ "${{ github.ref_type }}" == "branch" ]]; then
+             TAGS="${TAGS},${IMAGE_NAME}:${{ github.ref_name }}"
+          fi
 
-      - name: 📦 Build and Push Docker Image
+          # 2. 始终添加 SHA 标签 (例如 sha-a1b2c3d)
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          TAGS="${TAGS},${IMAGE_NAME}:sha-${SHORT_SHA}"
+
+          # --- 输出结果 ---
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+
+      # --- 3. 构建并推送 ---
+      - name: 📦 Build and Push
+        if: ${{ steps.meta.outputs.tags != '' }}
         uses: docker/build-push-action@v5
         with:
           context: .
-          # 如果你使用的是 ghcr.io，格式为 ghcr.io/liuxc-hub/warp-docker-proxy
-          # 如果你使用的是 Docker Hub，格式为 liuxc-hub/warp-docker-proxy
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          # 如果需要构建多架构 (arm64/amd64)，取消注释下面这行
-          # platforms: linux/amd64,linux/arm64
