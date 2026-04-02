@@ -190,7 +190,6 @@ docker-compose up -d
 ```bash
 docker exec warp-docker-proxy /bin/bash /clean-logs.sh
 ```
-
 ---
 
 ### 🔒 安全建议
@@ -200,6 +199,23 @@ docker exec warp-docker-proxy /bin/bash /clean-logs.sh
 3.  **定期更新**: 及时拉取最新镜像以获取安全补丁。
 4.  **访问控制**: 配合防火墙限制代理端口的访问来源。
 
-### 📄 许可证
-本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
+#  ⚙️Cloudflare Zero Trust 配置指南
 
+---
+
+####  配置入口
+登录 Cloudflare Zero Trust 控制台，导航至 `Team & Resources` → `Devices` → `Device profiles`。
+
+####  WARP 连接失败排查
+若客户端连接失败，请检查官网配置中使用的协议是否为 `WireGuard`。建议将协议配置调整为 `MASQUE` 协议以提升连接稳定性。
+
+####  手机端连接配置
+由于 `MASQUE` 协议暂不支持移动设备，需单独创建适用于手机的配置。
+
+1. 在 `Device profiles` 页面点击 `Create profile`。
+2. 填写配置名称与描述。
+3. 在 `Build an expression` 部分，设置 `Selector = Operating system`，`Operator = is/in`，`Value = Android/iOS`。
+4. 完成设置后，滚动至页面底部点击 `Create profile` 即可。
+
+# 📄 许可证
+本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
