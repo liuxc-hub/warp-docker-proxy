@@ -16,3 +16,4 @@ jobs:
           cut-off: 7 days ago UTC
           keep-at-least: 5
           token: ${{ secrets.GITHUB_TOKEN }}
+          account-type: personal  # 账户信息: 个人
