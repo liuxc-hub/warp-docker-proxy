@@ -1,24 +1,30 @@
 name: Delete old SHA images
 on:
   schedule:
-    - cron: '0 0 * * *' # 每天凌晨 00:00 执行
-  workflow_dispatch: # 允许手动触发
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
-# --- 新增：关键权限配置 ---
 permissions:
+  packages: write  # 必须保留
   contents: read
-  packages: write # 允许推送修改
 
 jobs:
-  delete-old-images:
+  clean-packages:
     runs-on: ubuntu-latest
     steps:
-      - name: Delete old images
+      - name: Clean up old container images
         uses: snok/container-retention-policy@v2
         with:
+          # 👇 关键修复：强制改成 org 模式 + 填入你的 GitHub 用户名
+          account-type: org
+          org-name: ${{ github.repository_owner }}  # 自动获取你的用户名/组织名
+
+          # 你的配置保持不变
           image-names: warp-docker-proxy
           tag-match-regex: ^sha-.*$
           cut-off: 7 days ago UTC
           keep-at-least: 5
           token: ${{ secrets.GITHUB_TOKEN }}
-          account-type: personal  # 账户信息: 个人
+
+          # 调试先关闭，正式运行用
+          dry-run: false
