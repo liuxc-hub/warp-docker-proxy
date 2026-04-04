@@ -16,5 +16,3 @@ jobs:
           cut-off: 7 days ago UTC
           keep-at-least: 5
           token: ${{ secrets.GITHUB_TOKEN }}
-          # 👇 新增这一行，明确指定账户类型
-          account-type: personal
